@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Recebimento e Triagem de Malotes</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SheetJS (xlsx) CDN para exportação para Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                            900: '#0f172a',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom styles for animations and notifications */
+        .toast-enter {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        .toast-enter-active {
+            transform: translateY(0);
+            opacity: 1;
+            transition: all 300ms ease-out;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-full flex flex-col font-sans transition-colors duration-200">
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none"></div>
+
+    <!-- Top Navigation Header -->
+    <header class="bg-brand-700 text-white shadow-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & System Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
+                        <i class="fa-solid me-0 fa-vials text-2xl text-cyan-300"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold leading-tight">TriagemLab</h1>
+                        <p class="text-xs text-brand-100 font-light">Controle de Malotes e Exames</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <nav class="hidden md:flex space-x-1 bg-brand-800/50 p-1 rounded-xl">
+                    <button id="tabRecepcaoBtn" onclick="switchTab('recepcao')" class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center space-x-2 bg-white text-brand-800 shadow">
+                        <i class="fa-solid fa-clipboard-check"></i>
+                        <span>1. Recepção (Registro)</span>
+                    </button>
+                    <button id="tabPainelBtn" onclick="switchTab('painel')" class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center space-x-2 text-brand-100 hover:text-white hover:bg-brand-600/50">
+                        <i class="fa-solid fa-tv"></i>
+                        <span>2. Painel TV / Cadastro</span>
+                    </button>
+                </nav>
+
+                <!-- Right Actions (Live Clock & Dark Mode Toggle) -->
+                <div class="flex items-center space-x-3">
+                    <!-- Real-Time Clock -->
+                    <div class="hidden sm:flex flex-col text-right pr-3 border-r border-brand-600/50">
+                        <span id="liveClock" class="text-sm font-mono font-bold tracking-wider">00:00:00</span>
+                        <span id="liveDate" class="text-xs text-brand-100">--/--/----</span>
+                    </div>
+
+                    <!-- Dark Mode Toggle -->
+                    <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-brand-800/40 hover:bg-brand-600 text-brand-100 hover:text-white transition-colors" title="Alternar tema escuro/claro">
+                        <i id="darkModeIcon" class="fa-solid fa-moon"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Tabs (Bottom Header Bar) -->
+        <div class="md:hidden flex border-t border-brand-600 bg-brand-800">
+            <button id="mobileTabRecepcao" onclick="switchTab('recepcao')" class="flex-1 py-3 text-center text-xs font-semibold text-white bg-brand-600 border-b-2 border-cyan-400">
+                <i class="fa-solid fa-clipboard-check block text-base mb-1"></i>
+                Registro
+            </button>
+            <button id="mobileTabPainel" onclick="switchTab('painel')" class="flex-1 py-3 text-center text-xs font-semibold text-brand-200 hover:text-white">
+                <i class="fa-solid fa-tv block text-base mb-1"></i>
+                Painel TV
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- ================================================================= -->
+        <!-- SCREEN 1: RECEPÇÃO (REGISTRO DE MALOTES)                         -->
+        <!-- ================================================================= -->
+        <section id="recepcaoScreen" class="space-y-6">
+            <!-- Screen Title Header -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-truck-ramp-box text-brand-600"></i> Registro de Chegada de Malotes
+                    </h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Cadastre a entrega dos malotes trazidos pelos parceiros e registe a hora de chegada ao setor.</p>
+                </div>
+                <div class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                    <i class="fa-solid fa-clock mr-1.5 text-brand-500"></i> Horário capturado automaticamente
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Main Entry Form -->
+                <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+                    <form id="maloteForm" onsubmit="registrarMalote(event)" class="space-y-5">
+                        
+                        <!-- Unit Selection with Option to Add New -->
+                        <div>
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="unidadeSelect" class="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                    Unidade / Hospital / Clínica Parceira <span class="text-red-500">*</span>
+                                </label>
+                                <button type="button" onclick="openAddUnitModal()" class="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium flex items-center gap-1">
+                                    <i class="fa-solid fa-plus-circle"></i> Nova Unidade
+                                </button>
+                            </div>
+                            <select id="unidadeSelect" required class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition text-base">
+                                <option value="" disabled selected>Selecione a unidade de origem...</option>
+                                <!-- Populated dynamically by JS -->
+                            </select>
+                        </div>
+
+                        <!-- Code / ID (Opcional) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="codigoMalote" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                                    Código ou Lacre <span class="text-xs text-slate-400 font-normal">(Opcional)</span>
+                                </label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                        <i class="fa-solid fa-barcode"></i>
+                                    </div>
+                                    <input type="text" id="codigoMalote" placeholder="Ex: MLT-8492" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none transition uppercase">
+                                </div>
+                            </div>
+
+                            <!-- Temperatura em °C (Opcional) -->
+                            <div>
+                                <label for="tempMalote" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                                    Temperatura (°C) <span class="text-xs text-slate-400 font-normal">(Opcional)</span>
+                                </label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                        <i class="fa-solid fa-temperature-half"></i>
+                                    </div>
+                                    <input type="number" step="0.1" id="tempMalote" placeholder="Ex: 4.5" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Condições da Caixa e Tipo de Exame (Opcionais) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Condição da Caixa -->
+                            <div>
+                                <label for="condicaoCaixa" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                                    Condição da Caixa <span class="text-xs text-slate-400 font-normal">(Opcional)</span>
+                                </label>
+                                <select id="condicaoCaixa" class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                                    <option value="" selected>Selecione a condição...</option>
+                                    <option value="Bom">Bom (Inteira / Lacrada)</option>
+                                    <option value="Ruim">Ruim (Avariada / Danificada)</option>
+                                </select>
+                            </div>
+
+                            <!-- Tipo de Exame -->
+                            <div>
+                                <label for="tipoExame" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                                    Tipo de Exame <span class="text-xs text-slate-400 font-normal">(Opcional)</span>
+                                </label>
+                                <select id="tipoExame" class="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none transition">
+                                    <option value="" selected>Selecione o tipo de exame...</option>
+                                    <option value="Malote Geral (Sangue, Urina, Fezes)">Malote Geral (Sangue, Urina, Fezes)</option>
+                                    <option value="Malote de Congelos">Malote de Congelos</option>
+                                    <option value="Temperatura Ambiente">Temperatura Ambiente</option>
+                                    <option value="Microbiologia">Microbiologia</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Observations -->
+                        <div>
+                            <label for="obsMalote" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                                Observações do Recebimento <span class="text-xs text-slate-400 font-normal">(opcional)</span>
+                            </label>
+                            <textarea id="obsMalote" rows="3" placeholder="Ex: Malote lacrado, prioridade de urgência UTI, etc." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"></textarea>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="pt-2 flex flex-col sm:flex-row gap-3">
+                            <button type="submit" class="flex-1 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-check-circle text-lg"></i>
+                                <span>Registrar Chegada no Setor</span>
+                            </button>
+                            <button type="button" onclick="limparFormulario()" class="px-5 py-3.5 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium transition">
+                                Limpar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Recent Activity Panel (Side Box) -->
+                <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <i class="fa-solid fa-history text-slate-400"></i> Últimos Registrados
+                            </h3>
+                            <span class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-mono" id="countHojeBadge">0 hoje</span>
+                        </div>
+
+                        <div id="recentList" class="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700">
+                        <button onclick="switchTab('painel')" class="w-full text-center text-sm font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center justify-center gap-1.5 py-1">
+                            <span>Ver todas as entregas no Painel</span>
+                            <i class="fa-solid fa-arrow-right text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- SCREEN 2: PAINEL DE VISUALIZAÇÃO DO SETOR (MODO TV / WALLBOARD)  -->
+        <!-- ================================================================= -->
+        <section id="painelScreen" class="space-y-6 hidden">
+            
+            <!-- TV Mode Toolbar: Auto Refresh Controls & Stats -->
+            <div class="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-3 bg-brand-600/30 text-cyan-400 rounded-xl border border-cyan-500/30">
+                        <i class="fa-solid fa-tv text-2xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold flex items-center gap-2">
+                            Painel de Monitoramento do Setor
+                        </h2>
+                        <p class="text-xs text-slate-400">Exibição otimizada para TV e telas de triagem/cadastro.</p>
+                    </div>
+                </div>
+
+                <!-- Auto-Refresh Config Bar -->
+                <div class="flex flex-wrap items-center gap-3 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700/80 w-full md:w-auto justify-between sm:justify-end">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-rotate text-cyan-400"></i>
+                        <label for="refreshIntervalSelect" class="text-xs text-slate-300 font-medium whitespace-nowrap">Atualizar a cada:</label>
+                        <select id="refreshIntervalSelect" onchange="configurarAutoRefresh()" class="bg-slate-900 text-cyan-300 font-semibold text-xs border border-slate-600 rounded-lg px-2.5 py-1 focus:ring-1 focus:ring-cyan-400 outline-none">
+                            <option value="1">1 minuto</option>
+                            <option value="5" selected>5 minutos</option>
+                            <option value="10">10 minutos</option>
+                            <option value="15">15 minutos</option>
+                            <option value="0">Desativado</option>
+                        </select>
+                    </div>
+
+                    <!-- Countdown Display & Manual Refresh Button -->
+                    <div class="flex items-center gap-3 pl-2 border-l border-slate-700">
+                        <span id="refreshTimerDisplay" class="text-xs font-mono font-bold text-amber-400 whitespace-nowrap min-w-[70px] text-center">05:00</span>
+                        <button onclick="forcarAtualizacaoManual()" title="Atualizar dados agora" class="px-3 py-1 bg-brand-600 hover:bg-brand-500 text-white font-medium text-xs rounded-lg shadow transition flex items-center gap-1.5 active:scale-95">
+                            <i class="fa-solid fa-arrows-rotate" id="refreshBtnIcon"></i>
+                            <span class="hidden sm:inline">Atualizar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prominent TV Cards: Ultimos Malotes em Destaque Alto Contraste -->
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-amber-500"></i> Malotes Chegados Hoje (Ordem de Entrada)
+                    </h3>
+                    <span id="totalHojeTV" class="text-xs font-bold bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300 px-3 py-1 rounded-full">0 Chegadas</span>
+                </div>
+
+                <div id="tvCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Dynamic TV cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- Detailed Table & Export Section -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-4">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    
+                    <!-- Search and Filters Group -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+                        <!-- Search Keyword / Unit -->
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-sm"></i>
+                            <input type="text" id="filterSearch" oninput="aplicarFiltros()" placeholder="Buscar por unidade ou código..." class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+
+                        <!-- Date Filter -->
+                        <div class="relative">
+                            <i class="fa-solid fa-calendar-day absolute left-3.5 top-3 text-slate-400 text-sm"></i>
+                            <input type="date" id="filterData" onchange="aplicarFiltros()" class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+
+                        <!-- Status Filter -->
+                        <div>
+                            <select id="filterStatus" onchange="aplicarFiltros()" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+                                <option value="TODOS">Todos os Status</option>
+                                <option value="Recebido">Recebido</option>
+                                <option value="Em Triagem">Em Triagem</option>
+                                <option value="Finalizado">Finalizado</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons: Excel Export & Clear Filter -->
+                    <div class="flex items-center gap-2 self-end lg:self-auto">
+                        <button onclick="limparFiltros()" title="Limpar filtros" class="px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl border border-slate-300 dark:border-slate-600 transition">
+                            <i class="fa-solid fa-filter-circle-xmark"></i>
+                        </button>
+                        
+                        <button onclick="exportarExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow transition flex items-center gap-2">
+                            <i class="fa-solid fa-file-excel text-base"></i>
+                            <span>Gerar Relatório Excel</span>
+                        </button>
+
+                        <button onclick="confirmarLimparDados()" title="Limpar histórico total" class="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 font-semibold text-sm px-3 py-2 rounded-xl transition">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Data Table Container -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100/80 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+                                <th class="py-3.5 px-4">Horário / Data</th>
+                                <th class="py-3.5 px-4">Unidade Parceira</th>
+                                <th class="py-3.5 px-4">Cód. / Temp.</th>
+                                <th class="py-3.5 px-4">Condição / Tipo</th>
+                                <th class="py-3.5 px-4">Status no Setor</th>
+                                <th class="py-3.5 px-4">Observações</th>
+                                <th class="py-3.5 px-4 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaCorpo" class="divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+                            <!-- Populated dynamically by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State Block -->
+                <div id="emptyState" class="p-12 text-center space-y-3 hidden">
+                    <div class="w-16 h-16 bg-slate-100 dark:bg-slate-700 text-slate-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                        <i class="fa-solid fa-inbox"></i>
+                    </div>
+                    <h4 class="text-base font-semibold text-slate-700 dark:text-slate-300">Nenhum registro encontrado</h4>
+                    <p class="text-xs text-slate-500 max-w-sm mx-auto">Não existem registros de malotes que correspondam aos filtros selecionados ou nenhuma entrega foi realizada hoje.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Adicionar Nova Unidade Parceira -->
+    <div id="unitModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3">
+                <h3 class="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-hospital text-brand-600"></i> Cadastrar Nova Unidade
+                </h3>
+                <button onclick="closeAddUnitModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <form onsubmit="salvarNovaUnidade(event)" class="space-y-4">
+                <div>
+                    <label for="nomeNovaUnidade" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Nome da Clínica ou Hospital <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="nomeNovaUnidade" required placeholder="Ex: Hospital Municipal Central" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeAddUnitModal()" class="px-4 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow">
+                        Salvar Unidade
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Confirmation Cleardown -->
+    <div id="confirmClearModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-700 space-y-4 text-center">
+            <div class="w-12 h-12 bg-rose-100 dark:bg-rose-900/40 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white">Resetar Dados do Sistema?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Esta ação apagará todos os registros de malotes armazenados localmente. Recomenda-se exportar o relatório do dia antes de prosseguir.</p>
+            <div class="flex justify-center gap-3 pt-2">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                    Cancelar
+                </button>
+                <button onclick="limparTodosDados()" class="px-4 py-2 text-sm bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow">
+                    Sim, Limpar Tudo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Javascript Application Logic -->
+    <script>
+        // Default Units List
+        const DEFAULT_UNIDADES = [
+            "Hospital Santa Cruz",
+            "Clínica Bem Estar",
+            "Laboratório Central",
+            "Unidade Jardins",
+            "Pronto Atendimento São José",
+            "Instituto Diagnóstico Vida"
+        ];
+
+        // Global State Variables
+        let unidadesList = [];
+        let malotesList = [];
+        let autoRefreshTimer = null;
+        let countdownTimer = null;
+        let remainingSeconds = 300; // 5 mins default
+
+        // Application Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            initStorage();
+            startLiveClock();
+            populateUnitSelect();
+            renderRecentList();
+            renderTVCards();
+            renderTable();
+            configurarAutoRefresh();
+
+            // Sincronização em tempo real entre abas/janelas do navegador via localStorage
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'triagem_malotes_data') {
+                    malotesList = JSON.parse(e.newValue || '[]');
+                    renderTable();
+                    renderRecentList();
+                    renderTVCards();
+                    showToast('Painel atualizado em tempo real!', 'info');
+                }
+            });
+        });
+
+        // Local Storage Handler
+        function initStorage() {
+            // Load Units
+            const savedUnits = localStorage.getItem('triagem_unidades_data');
+            if (savedUnits) {
+                unidadesList = JSON.parse(savedUnits);
+            } else {
+                unidadesList = [...DEFAULT_UNIDADES];
+                localStorage.setItem('triagem_unidades_data', JSON.stringify(unidadesList));
+            }
+
+            // Load Malotes Records
+            const savedMalotes = localStorage.getItem('triagem_malotes_data');
+            if (savedMalotes) {
+                malotesList = JSON.parse(savedMalotes);
+            } else {
+                malotesList = [];
+            }
+        }
+
+        function saveMalotesToStorage() {
+            localStorage.setItem('triagem_malotes_data', JSON.stringify(malotesList));
+            renderRecentList();
+            renderTVCards();
+            renderTable();
+        }
+
+        // Live Clock Timer
+        function startLiveClock() {
+            const clockEl = document.getElementById('liveClock');
+            const dateEl = document.getElementById('liveDate');
+            
+            function update() {
+                const now = new Date();
+                clockEl.textContent = now.toLocaleTimeString('pt-BR');
+                dateEl.textContent = now.toLocaleDateString('pt-BR');
+            }
+            update();
+            setInterval(update, 1000);
+        }
+
+        // Auto Refresh System Configuration
+        function configurarAutoRefresh() {
+            const intervalMin = parseInt(document.getElementById('refreshIntervalSelect').value);
+            
+            clearInterval(autoRefreshTimer);
+            clearInterval(countdownTimer);
+
+            const timerDisplay = document.getElementById('refreshTimerDisplay');
+
+            if (intervalMin === 0) {
+                timerDisplay.textContent = "Desativado";
+                return;
+            }
+
+            remainingSeconds = intervalMin * 60;
+            atualizarDisplayTimer();
+
+            countdownTimer = setInterval(() => {
+                remainingSeconds--;
+                if (remainingSeconds <= 0) {
+                    forcarAtualizacaoManual();
+                    remainingSeconds = intervalMin * 60;
+                }
+                atualizarDisplayTimer();
+            }, 1000);
+        }
+
+        function atualizarDisplayTimer() {
+            const timerDisplay = document.getElementById('refreshTimerDisplay');
+            const mins = Math.floor(remainingSeconds / 60);
+            const secs = remainingSeconds % 60;
+            timerDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function forcarAtualizacaoManual() {
+            const icon = document.getElementById('refreshBtnIcon');
+            if (icon) icon.classList.add('fa-spin');
+            
+            initStorage();
+            renderRecentList();
+            renderTVCards();
+            renderTable();
+
+            setTimeout(() => {
+                if (icon) icon.classList.remove('fa-spin');
+                showToast('Painel atualizado!', 'info');
+            }, 400);
+
+            // Reset timer
+            const intervalMin = parseInt(document.getElementById('refreshIntervalSelect').value);
+            if (intervalMin > 0) {
+                remainingSeconds = intervalMin * 60;
+                atualizarDisplayTimer();
+            }
+        }
+
+        // Populate Select Dropdown
+        function populateUnitSelect() {
+            const select = document.getElementById('unidadeSelect');
+            select.innerHTML = '<option value="" disabled selected>Selecione a unidade de origem...</option>';
+            
+            unidadesList.sort().forEach(unit => {
+                const opt = document.createElement('option');
+                opt.value = unit;
+                opt.textContent = unit;
+                select.appendChild(opt);
+            });
+        }
+
+        // Tab Navigation Switcher
+        function switchTab(tab) {
+            const recepcaoScreen = document.getElementById('recepcaoScreen');
+            const painelScreen = document.getElementById('painelScreen');
+            
+            const tabRecepcaoBtn = document.getElementById('tabRecepcaoBtn');
+            const tabPainelBtn = document.getElementById('tabPainelBtn');
+            
+            const mobileTabRecepcao = document.getElementById('mobileTabRecepcao');
+            const mobileTabPainel = document.getElementById('mobileTabPainel');
+
+            if (tab === 'recepcao') {
+                recepcaoScreen.classList.remove('hidden');
+                painelScreen.classList.add('hidden');
+
+                // Desktop style
+                tabRecepcaoBtn.className = "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center space-x-2 bg-white text-brand-800 shadow";
+                tabPainelBtn.className = "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center space-x-2 text-brand-100 hover:text-white hover:bg-brand-600/50";
+
+                // Mobile style
+                mobileTabRecepcao.className = "flex-1 py-3 text-center text-xs font-semibold text-white bg-brand-600 border-b-2 border-cyan-400";
+                mobileTabPainel.className = "flex-1 py-3 text-center text-xs font-semibold text-brand-200 hover:text-white";
+            } else {
+                recepcaoScreen.classList.add('hidden');
+                painelScreen.classList.remove('hidden');
+
+                // Desktop style
+                tabPainelBtn.className = "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center space-x-2 bg-white text-brand-800 shadow";
+                tabRecepcaoBtn.className = "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center space-x-2 text-brand-100 hover:text-white hover:bg-brand-600/50";
+
+                // Mobile style
+                mobileTabPainel.className = "flex-1 py-3 text-center text-xs font-semibold text-white bg-brand-600 border-b-2 border-cyan-400";
+                mobileTabRecepcao.className = "flex-1 py-3 text-center text-xs font-semibold text-brand-200 hover:text-white";
+                
+                // Refresh TV View
+                renderTVCards();
+                renderTable();
+            }
+        }
+
+        // Register New Malote Event Handler
+        function registrarMalote(e) {
+            e.preventDefault();
+
+            const unidade = document.getElementById('unidadeSelect').value;
+            let codigo = document.getElementById('codigoMalote').value.trim().toUpperCase();
+            const tempVal = document.getElementById('tempMalote').value.trim();
+            const condicao = document.getElementById('condicaoCaixa').value;
+            const tipo = document.getElementById('tipoExame').value;
+            const obs = document.getElementById('obsMalote').value.trim();
+
+            if (!unidade) {
+                showToast('Selecione a Unidade parceira!', 'error');
+                return;
+            }
+
+            if (!codigo) {
+                codigo = 'S/N';
+            }
+
+            const now = new Date();
+            const isoDate = now.toISOString().split('T')[0];
+            const formattedDate = now.toLocaleDateString('pt-BR');
+            const formattedTime = now.toLocaleTimeString('pt-BR');
+
+            const novoRegistro = {
+                id: 'MLT-' + Date.now(),
+                unidade: unidade,
+                codigo: codigo,
+                temperatura: tempVal !== '' ? `${parseFloat(tempVal).toFixed(1)} °C` : 'Não informada',
+                condicao: condicao || 'Não informada',
+                tipoExame: tipo || 'Não informado',
+                dataISO: isoDate,
+                data: formattedDate,
+                horario: formattedTime,
+                obs: obs || 'Sem observações',
+                status: 'Recebido'
+            };
+
+            malotesList.unshift(novoRegistro);
+            saveMalotesToStorage();
+
+            showToast(`Chegada da unidade "${unidade}" registrada às ${formattedTime}!`, 'success');
+            limparFormulario();
+        }
+
+        function limparFormulario() {
+            document.getElementById('maloteForm').reset();
+        }
+
+        // Render Side Box with Recent Deliveries
+        function renderRecentList() {
+            const recentContainer = document.getElementById('recentList');
+            const countBadge = document.getElementById('countHojeBadge');
+            
+            const hojeISO = new Date().toISOString().split('T')[0];
+            const hojeItems = malotesList.filter(item => item.dataISO === hojeISO);
+
+            countBadge.textContent = `${hojeItems.length} hoje`;
+
+            if (malotesList.length === 0) {
+                recentContainer.innerHTML = '<p class="text-xs text-slate-400 py-4 text-center">Nenhum malote registrado ainda.</p>';
+                return;
+            }
+
+            // Show top 5 recent
+            const top5 = malotesList.slice(0, 5);
+            recentContainer.innerHTML = top5.map(item => `
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200/60 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-sm text-slate-800 dark:text-slate-100">${item.unidade}</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Cód: <span class="font-mono">${item.codigo}</span></p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs font-mono font-bold text-brand-600 dark:text-brand-400 block">${item.horario}</span>
+                        <span class="text-[10px] text-slate-400 block">${item.data}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Render High-Contrast TV Mode Display Cards
+        function renderTVCards() {
+            const container = document.getElementById('tvCardsContainer');
+            const countEl = document.getElementById('totalHojeTV');
+
+            const hojeISO = new Date().toISOString().split('T')[0];
+            const hojeItems = malotesList.filter(item => item.dataISO === hojeISO);
+
+            if (countEl) countEl.textContent = `${hojeItems.length} Chegada(s) Hoje`;
+
+            if (hojeItems.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center">
+                        <i class="fa-solid fa-hospital-user text-4xl text-slate-300 dark:text-slate-600 mb-2"></i>
+                        <h3 class="text-lg font-bold text-slate-700 dark:text-slate-300">Nenhum malote recebido hoje</h3>
+                        <p class="text-xs text-slate-400">As novas entregas registradas na recepção aparecerão em destaque automático aqui nesta TV.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = hojeItems.slice(0, 6).map((item, index) => {
+                const isLatest = index === 0;
+
+                let statusColor = "bg-amber-500 text-white";
+                if (item.status === "Em Triagem") statusColor = "bg-blue-600 text-white";
+                if (item.status === "Finalizado") statusColor = "bg-emerald-600 text-white";
+
+                let condicaoBadge = '';
+                if (item.condicao === 'Bom') {
+                    condicaoBadge = `<span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] px-2 py-0.5 rounded font-bold"><i class="fa-solid fa-circle-check mr-1"></i>Caixa: Boa</span>`;
+                } else if (item.condicao === 'Ruim') {
+                    condicaoBadge = `<span class="bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] px-2 py-0.5 rounded font-bold animate-pulse"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Caixa: Ruim</span>`;
+                }
+
+                return `
+                    <div class="relative bg-slate-900 text-white rounded-2xl p-5 shadow-lg border-2 ${isLatest ? 'border-amber-400 ring-4 ring-amber-400/20 animate-pulse' : 'border-slate-700'} flex flex-col justify-between transition-all">
+                        
+                        ${isLatest ? `
+                            <div class="absolute -top-3 right-4 bg-amber-400 text-slate-900 text-[10px] font-extrabold uppercase px-3 py-1 rounded-full shadow tracking-wider flex items-center gap-1">
+                                <i class="fa-solid fa-bell text-xs"></i> Recém Chegado
+                            </div>
+                        ` : ''}
+
+                        <div>
+                            <!-- Header: Code & Status -->
+                            <div class="flex items-center justify-between gap-2 mb-3">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="text-xs font-mono bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">
+                                        Cód: <strong class="text-white">${item.codigo}</strong>
+                                    </span>
+                                    ${item.temperatura && item.temperatura !== 'Não informada' ? `
+                                        <span class="text-xs font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-1 rounded-lg font-bold">
+                                            <i class="fa-solid fa-temperature-half mr-1 text-cyan-400"></i>${item.temperatura}
+                                        </span>
+                                    ` : ''}
+                                </div>
+                                <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg ${statusColor}">
+                                    ${item.status}
+                                </span>
+                            </div>
+
+                            <!-- MAIN UNIT NAME (TV PROMINENT FONT) -->
+                            <h3 class="text-2xl sm:text-3xl font-black text-white leading-tight mb-2 tracking-tight drop-shadow-sm">
+                                ${item.unidade}
+                            </h3>
+
+                            <!-- Details Badges (Exams and Box status) -->
+                            <div class="flex flex-wrap items-center gap-2 mb-4">
+                                ${item.tipoExame && item.tipoExame !== 'Não informado' ? `
+                                    <span class="bg-slate-800 text-cyan-300 border border-slate-700 text-[11px] px-2.5 py-0.5 rounded-md font-medium">
+                                        <i class="fa-solid fa-vial mr-1 text-cyan-400"></i>${item.tipoExame}
+                                    </span>
+                                ` : ''}
+                                ${condicaoBadge}
+                            </div>
+                        </div>
+
+                        <!-- Footer: Enriched Time & Date Box -->
+                        <div class="bg-slate-800/90 rounded-xl p-3 border border-slate-700/80 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-clock text-amber-400 text-xl"></i>
+                                <div>
+                                    <span class="text-[10px] uppercase font-bold text-slate-400 block leading-none">Horário de Entrada</span>
+                                    <span class="text-xl font-mono font-extrabold text-amber-300">${item.horario}</span>
+                                </div>
+                            </div>
+                            <div class="text-right border-l border-slate-700 pl-3">
+                                <span class="text-[10px] uppercase font-bold text-slate-400 block leading-none">Data</span>
+                                <span class="text-xs font-bold text-slate-200">${item.data}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Render Sector Main Table
+        function renderTable() {
+            const tbody = document.getElementById('tabelaCorpo');
+            const emptyState = document.getElementById('emptyState');
+            
+            const search = document.getElementById('filterSearch').value.toLowerCase();
+            const dateFilter = document.getElementById('filterData').value;
+            const statusFilter = document.getElementById('filterStatus').value;
+
+            let filtered = malotesList.filter(item => {
+                const matchSearch = item.unidade.toLowerCase().includes(search) || 
+                                    item.codigo.toLowerCase().includes(search) ||
+                                    (item.tipoExame && item.tipoExame.toLowerCase().includes(search));
+                const matchDate = !dateFilter || item.dataISO === dateFilter;
+                const matchStatus = statusFilter === 'TODOS' || item.status === statusFilter;
+                return matchSearch && matchDate && matchStatus;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            tbody.innerHTML = filtered.map(item => {
+                let statusBadge = '';
+                if (item.status === 'Recebido') {
+                    statusBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"><i class="fa-solid fa-clock mr-1 text-[10px]"></i> Recebido</span>`;
+                } else if (item.status === 'Em Triagem') {
+                    statusBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"><i class="fa-solid fa-gear mr-1 text-[10px] fa-spin"></i> Em Triagem</span>`;
+                } else {
+                    statusBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"><i class="fa-solid fa-check mr-1 text-[10px]"></i> Finalizado</span>`;
+                }
+
+                let condColor = 'text-slate-500';
+                if (item.condicao === 'Bom') condColor = 'text-emerald-600 font-bold';
+                if (item.condicao === 'Ruim') condColor = 'text-rose-600 font-bold';
+
+                return `
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                        <td class="py-3.5 px-4 whitespace-nowrap">
+                            <span class="font-mono font-bold text-slate-800 dark:text-slate-100 block text-base">${item.horario}</span>
+                            <span class="text-xs text-slate-400 block">${item.data}</span>
+                        </td>
+                        <td class="py-3.5 px-4 font-extrabold text-slate-800 dark:text-slate-100 text-base">
+                            ${item.unidade}
+                        </td>
+                        <td class="py-3.5 px-4 whitespace-nowrap text-xs">
+                            <span class="font-mono text-brand-600 dark:text-brand-400 block font-bold">${item.codigo}</span>
+                            <span class="text-slate-400 font-mono">${item.temperatura || '-'}</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs">
+                            <span class="block ${condColor}">Caixa: ${item.condicao || '-'}</span>
+                            <span class="text-slate-500 dark:text-slate-400 truncate max-w-[150px] block">${item.tipoExame || '-'}</span>
+                        </td>
+                        <td class="py-3.5 px-4 whitespace-nowrap">
+                            ${statusBadge}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-500 dark:text-slate-400 text-xs max-w-xs truncate" title="${item.obs}">
+                            ${item.obs}
+                        </td>
+                        <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                            <select onchange="alterarStatus('${item.id}', this.value)" class="text-xs bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 focus:ring-1 focus:ring-brand-500 outline-none">
+                                <option value="Recebido" ${item.status === 'Recebido' ? 'selected' : ''}>Marcar: Recebido</option>
+                                <option value="Em Triagem" ${item.status === 'Em Triagem' ? 'selected' : ''}>Marcar: Em Triagem</option>
+                                <option value="Finalizado" ${item.status === 'Finalizado' ? 'selected' : ''}>Marcar: Finalizado</option>
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Change Status Action
+        // Export to Excel using SheetJS (Padrão Brasileiro BR)
+        function exportarExcel() {
+            if (malotesList.length === 0) {
+                showToast('Não há dados disponíveis para exportar!', 'error');
+                return;
+            }
+
+            const search = document.getElementById('filterSearch').value.toLowerCase();
+            const dateFilter = document.getElementById('filterData').value;
+            const statusFilter = document.getElementById('filterStatus').value;
+
+            let dadosExportar = malotesList.filter(item => {
+                const matchSearch = item.unidade.toLowerCase().includes(search) || 
+                                    item.codigo.toLowerCase().includes(search) ||
+                                    (item.tipoExame && item.tipoExame.toLowerCase().includes(search));
+                const matchDate = !dateFilter || item.dataISO === dateFilter;
+                const matchStatus = statusFilter === 'TODOS' || item.status === statusFilter;
+                return matchSearch && matchDate && matchStatus;
+            });
+
+            if (dadosExportar.length === 0) {
+                showToast('Nenhum dado encontrado para os filtros atuais.', 'error');
+                return;
+            }
+
+            // Map dataset for Brazilian Excel format
+            const excelRows = dadosExportar.map(item => ({
+                "Data": item.data || "-",
+                "Horário Chegada": item.horario || "-",
+                "Unidade / Hospital Parceiro": item.unidade || "-",
+                "Código / Lacre Malote": item.codigo && item.codigo !== 'S/N' ? item.codigo : "-",
+                "Temperatura (°C)": item.temperatura && item.temperatura !== 'Não informada' ? item.temperatura : "-",
+                "Condição da Caixa": item.condicao && item.condicao !== 'Não informada' ? item.condicao : "-",
+                "Tipo de Exame": item.tipoExame && item.tipoExame !== 'Não informado' ? item.tipoExame : "-",
+                "Status no Setor": item.status || "-",
+                "Observações do Recebimento": item.obs || "-"
+            }));
+
+            // Create Worksheet
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            
+            // Adjust Column Widths for Brazilian standards
+            worksheet['!cols'] = [
+                { wch: 14 }, // Data
+                { wch: 16 }, // Horario
+                { wch: 36 }, // Unidade
+                { wch: 22 }, // Codigo
+                { wch: 18 }, // Temperatura
+                { wch: 20 }, // Condicao Caixa
+                { wch: 38 }, // Tipo Exame
+                { wch: 18 }, // Status
+                { wch: 40 }  // Obs
+            ];
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Recebimento_Malotes");
+
+            const todayStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+            const fileName = `Relatorio_Recebimento_Malotes_${todayStr}.xlsx`;
+
+            XLSX.writeFile(workbook, fileName);
+            showToast('Relatório Excel em padrão brasileiro gerado com sucesso!', 'success');
+        }
+
+        // Filters Helper
+        function aplicarFiltros() {
+            renderTable();
+        }
+
+        function limparFiltros() {
+            document.getElementById('filterSearch').value = '';
+            document.getElementById('filterData').value = '';
+            document.getElementById('filterStatus').value = 'TODOS';
+            renderTable();
+        }
+
+        // Add Unit Modal Handlers
+        function openAddUnitModal() {
+            document.getElementById('unitModal').classList.remove('hidden');
+        }
+
+        function closeAddUnitModal() {
+            document.getElementById('unitModal').classList.add('hidden');
+            document.getElementById('nomeNovaUnidade').value = '';
+        }
+
+        function salvarNovaUnidade(e) {
+            e.preventDefault();
+            const nova = document.getElementById('nomeNovaUnidade').value.trim();
+            if (nova && !unidadesList.includes(nova)) {
+                unidadesList.push(nova);
+                localStorage.setItem('triagem_unidades_data', JSON.stringify(unidadesList));
+                populateUnitSelect();
+                document.getElementById('unidadeSelect').value = nova;
+                closeAddUnitModal();
+                showToast('Nova unidade adicionada com sucesso!', 'success');
+            } else if (unidadesList.includes(nova)) {
+                showToast('Esta unidade já existe na lista!', 'error');
+            }
+        }
+
+        // Export to Excel using SheetJS
+        function exportarExcel() {
+            if (malotesList.length === 0) {
+                showToast('Não há dados disponíveis para exportar!', 'error');
+                return;
+            }
+
+            const search = document.getElementById('filterSearch').value.toLowerCase();
+            const dateFilter = document.getElementById('filterData').value;
+            const statusFilter = document.getElementById('filterStatus').value;
+
+            // Filter data according to current table view
+            let dadosExportar = malotesList.filter(item => {
+                const matchSearch = item.unidade.toLowerCase().includes(search) || item.codigo.toLowerCase().includes(search);
+                const matchDate = !dateFilter || item.dataISO === dateFilter;
+                const matchStatus = statusFilter === 'TODOS' || item.status === statusFilter;
+                return matchSearch && matchDate && matchStatus;
+            });
+
+            if (dadosExportar.length === 0) {
+                showToast('Nenhum dado encontrado para os filtros atuais.', 'error');
+                return;
+            }
+
+            // Map dataset for clean Excel headers
+            const excelRows = dadosExportar.map(item => ({
+                "Data de Chegada": item.data,
+                "Horário de Chegada": item.horario,
+                "Unidade / Hospital": item.unidade,
+                "Código / Lacre": item.codigo,
+                "Status no Setor": item.status,
+                "Observações": item.obs
+            }));
+
+            // Create Worksheet
+            const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            
+            // Adjust Column Widths
+            worksheet['!cols'] = [
+                { wch: 16 }, // Data
+                { wch: 18 }, // Horario
+                { wch: 32 }, // Unidade
+                { wch: 18 }, // Codigo
+                { wch: 18 }, // Status
+                { wch: 35 }  // Obs
+            ];
+
+            // Create Workbook
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio_Malotes");
+
+            // Generate Filename with Date
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const fileName = `Relatorio_Recebimento_Malotes_${todayStr}.xlsx`;
+
+            // Export XLSX File
+            XLSX.writeFile(workbook, fileName);
+            showToast('Relatório Excel gerado com sucesso!', 'success');
+        }
+
+        // Clear Data Confirm Modal
+        function confirmarLimparDados() {
+            document.getElementById('confirmClearModal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmClearModal').classList.add('hidden');
+        }
+
+        function limparTodosDados() {
+            malotesList = [];
+            localStorage.removeItem('triagem_malotes_data');
+            saveMalotesToStorage();
+            closeConfirmModal();
+            showToast('Todos os registros foram limpos!', 'info');
+        }
+
+        // Dark Mode Toggle
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            const icon = document.getElementById('darkModeIcon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                icon.className = 'fa-solid fa-moon';
+            } else {
+                html.classList.add('dark');
+                icon.className = 'fa-solid fa-sun';
+            }
+        }
+
+        // Custom Toast Notification System
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            
+            const toast = document.createElement('div');
+            toast.className = `p-4 rounded-xl shadow-lg border text-sm font-medium flex items-center justify-between pointer-events-auto transform transition-all duration-300 toast-enter`;
+            
+            let iconClass = 'fa-info-circle text-blue-500';
+
+            if (type === 'success') {
+                iconClass = 'fa-circle-check text-emerald-500';
+            } else if (type === 'error') {
+                iconClass = 'fa-circle-xmark text-rose-500';
+            }
+
+            toast.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid ${iconClass} text-lg"></i>
+                    <span>${message}</span>
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-4">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            `;
+
+            container.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('toast-enter');
+            }, 10);
+
+            // Auto Remove after 4s
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
