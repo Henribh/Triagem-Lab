@@ -107,7 +107,8 @@ function ouvirEntregasFirebase() {
         entregas = [];
         if (dados) {
             for (let key in dados) {
-                entregas.push({ id: key, ...dados[key] });
+                // Garante que a propriedade id corresponda à chave real do Firebase
+                entregas.push({ ...dados[key], id: key });
             }
             entregas.sort((a, b) => b.timestamp - a.timestamp);
         }
@@ -132,7 +133,6 @@ function registrarMalote(e) {
     const agora = new Date();
     
     const novoMalote = {
-        id: 'mlt_' + Date.now(),
         recebidoPor: document.getElementById('recebidoPor').value,
         nomeMotorista: document.getElementById('nomeMotorista').value,
         unidade: document.getElementById('selectUnidade').value,
@@ -151,6 +151,7 @@ function registrarMalote(e) {
     if (usaFirebase) {
         db.ref('entregas').push(novoMalote);
     } else {
+        novoMalote.id = 'mlt_' + Date.now();
         entregas.unshift(novoMalote);
         localStorage.setItem('malotes_dados', JSON.stringify(entregas));
         carregarEntregasLocal(); 
@@ -442,7 +443,7 @@ function configurarTimer() {
         
         if (tempoRestante <= 0) {
             tempoRestante = val;
-            if(!usaFirebase) carregarEntregasLocal(); // No modo local, força o F5 dos dados
+            if(!usaFirebase) carregarEntregasLocal();
         }
     }, 1000);
 }
