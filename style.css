@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Estilos de Input Padronizados */
+.input-padrao {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    border: 1px solid #cbd5e1;
+    background-color: #f8fafc;
+    color: #1e293b;
+    transition: all 0.2s;
+    outline: none;
+}
+
+.input-padrao:focus {
+    border-color: #006080;
+    box-shadow: 0 0 0 3px rgba(0, 96, 128, 0.1);
+    background-color: #ffffff;
+}
+
+/* Modo Escuro para Inputs */
+.dark .input-padrao {
+    border-color: #334155;
+    background-color: #0f172a;
+    color: #f1f5f9;
+}
+.dark .input-padrao:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* Animações de Status */
+@keyframes glow-red {
+    0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); border-color: #fca5a5; }
+    50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); border-color: #ef4444; }
+}
+@keyframes glow-yellow {
+    0%, 100% { box-shadow: 0 0 10px rgba(234, 179, 8, 0.2); border-color: #fde047; }
+    50% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.6); border-color: #eab308; }
+}
+
+.card-ativo-novo {
+    animation: glow-red 2.5s infinite;
+    border-width: 2px;
+}
+
+.card-ativo-triagem {
+    animation: glow-yellow 2.5s infinite;
+    border-width: 2px;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #475569;
+}
