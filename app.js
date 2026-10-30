@@ -2,13 +2,14 @@
 // 1. CONFIGURAÇÃO DO FIREBASE (SISTEMA HÍBRIDO)
 // ==========================================
 const firebaseConfig = {
-    apiKey: "SUA_API_KEY",
-    authDomain: "SEU_PROJETO.firebaseapp.com",
-    databaseURL: "https://SEU_PROJETO-default-rtdb.firebaseio.com",
-    projectId: "SEU_PROJETO",
-    storageBucket: "SEU_PROJETO.appspot.com",
-    messagingSenderId: "SEU_SENDER_ID",
-    appId: "SEU_APP_ID"
+  apiKey: "AIzaSyAt2ce0_8REpyy_0v0HzJZoYKzgF529HI0",
+  authDomain: "triagem-lab.firebaseapp.com",
+  databaseURL: "https://triagem-lab-default-rtdb.firebaseio.com",
+  projectId: "triagem-lab",
+  storageBucket: "triagem-lab.firebasestorage.app",
+  messagingSenderId: "621280430865",
+  appId: "1:621280430865:web:acf193b814489dba599ab0",
+  measurementId: "G-88VX9BK459"
 };
 
 // VARIÁVEIS GLOBAIS
@@ -27,7 +28,7 @@ try {
         usaFirebase = true;
         console.log("Modo Nuvem: Firebase ativado em tempo real!");
     } else {
-        console.warn("Modo Local: Chaves do Firebase não configuradas. Funcionando offline via localStorage.");
+        console.warn("Modo Local: Chaves do Firebase não configuradas. Funcionando offline.");
     }
 } catch (e) {
     console.error("Erro ao iniciar Firebase, caindo para modo Local.", e);
@@ -63,7 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // 3. COMUNICAÇÃO DE DADOS (FIREBASE OU LOCAL)
 // ==========================================
 
-// --- PARCEIROS ---
 function ouvirParceirosFirebase() {
     db.ref('parceiros').on('value', (snapshot) => {
         const dados = snapshot.val();
@@ -101,7 +101,6 @@ function atualizarParceirosNoBanco() {
     }
 }
 
-// --- ENTREGAS (MALOTES) ---
 function ouvirEntregasFirebase() {
     db.ref('entregas').on('value', (snapshot) => {
         const dados = snapshot.val();
@@ -154,7 +153,7 @@ function registrarMalote(e) {
     } else {
         entregas.unshift(novoMalote);
         localStorage.setItem('malotes_dados', JSON.stringify(entregas));
-        carregarEntregasLocal(); // Força atualização na tela
+        carregarEntregasLocal(); 
     }
     
     limparFormularioParcial();
